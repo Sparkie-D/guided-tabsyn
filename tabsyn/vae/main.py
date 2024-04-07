@@ -88,6 +88,17 @@ def main(args):
     X_train_num, X_test_num = torch.tensor(X_train_num).float(), torch.tensor(X_test_num).float()
     X_train_cat, X_test_cat =  torch.tensor(X_train_cat), torch.tensor(X_test_cat)
 
+    X_num_fewshot, X_cat_fewshot, categories_fewshot, d_numerical_fewshot = preprocess(data_dir+'_fewshot', task_type = info['task_type'])
+    print(categories, d_numerical, categories_fewshot, d_numerical_fewshot)
+
+    X_train_num_fewshot, _ = X_num_fewshot
+    X_train_cat_fewshot, _ = X_cat_fewshot
+
+    X_train_num_fewshot, X_test_num_fewshot = X_num_fewshot
+    X_train_cat_fewshot, X_test_cat_fewshot = X_cat_fewshot
+
+    X_train_num_fewshot, X_test_num_fewshot = torch.tensor(X_train_num_fewshot).float(), torch.tensor(X_test_num_fewshot).float()
+    X_train_cat_fewshot, X_test_cat_fewshot =  torch.tensor(X_train_cat_fewshot), torch.tensor(X_test_cat_fewshot)
 
     train_data = TabularDataset(X_train_num.float(), X_train_cat)
 
@@ -114,7 +125,7 @@ def main(args):
     optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=WD)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.95, patience=10, verbose=True)
 
-    num_epochs = 4000
+    num_epochs = 200
     best_train_loss = float('inf')
 
     current_lr = optimizer.param_groups[0]['lr']
@@ -206,9 +217,14 @@ def main(args):
 
         print('Successfully load and save the model!')
 
-        train_z = pre_encoder(X_train_num, X_train_cat).detach().cpu().numpy()
+        train_z = pre_encoder(X_train_num, X_train_cat).detach().cpu().numpy()\
 
         np.save(f'{ckpt_dir}/train_z.npy', train_z)
+            
+        X_train_num_fewshot = X_train_num_fewshot.to(device)
+        X_train_cat_fewshot = X_train_cat_fewshot.to(device)
+        train_z_fewshot = pre_encoder(X_train_num_fewshot, X_train_cat_fewshot).detach().cpu().numpy()
+        np.save(f'{ckpt_dir}_fewshot/train_z.npy', train_z)
 
         print('Successfully save pretrained embeddings in disk!')
 

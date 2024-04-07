@@ -28,6 +28,44 @@ def get_input_train(args):
     return train_z, curr_dir, dataset_dir, ckpt_dir, info
 
 
+def get_input_generate_disc(args):
+    dataname = args.dataname
+    pretrain_name = args.dataname.replace('_fewshot', '')
+    curr_dir = os.path.dirname(os.path.abspath(__file__))
+    dataset_dir = f'data/{dataname}'
+    pretrain_dir = dataset_dir.replace('_fewshot', '')
+    ckpt_dir = f'{curr_dir}/ckpt/{dataname}'
+
+    with open(f'{dataset_dir}/info.json', 'r') as f:
+        info = json.load(f)
+
+    task_type = info['task_type']
+
+
+    ckpt_dir = f'{curr_dir}/ckpt/{pretrain_name}'
+    disc_dir = f'{curr_dir}/discriminator/ckpt/{dataname}'
+
+    _, _, categories, d_numerical, num_inverse, cat_inverse = preprocess(pretrain_dir, task_type = task_type, inverse = True)
+
+    embedding_save_path = f'{curr_dir}/vae/ckpt/{dataname}/train_z.npy'
+    train_z = torch.tensor(np.load(embedding_save_path)).float()
+
+    train_z = train_z[:, 1:, :]
+
+    B, num_tokens, token_dim = train_z.size()
+    in_dim = num_tokens * token_dim
+    
+    train_z = train_z.view(B, in_dim)
+    pre_decoder = Decoder_model(2, d_numerical, categories, 4, n_head = 1, factor = 32)
+
+    decoder_save_path = f'{curr_dir}/vae/ckpt/{pretrain_name}/decoder.pt'
+    pre_decoder.load_state_dict(torch.load(decoder_save_path))
+
+    info['pre_decoder'] = pre_decoder
+    info['token_dim'] = token_dim
+
+    return train_z, curr_dir, dataset_dir, ckpt_dir, disc_dir, info, num_inverse, cat_inverse
+
 def get_input_generate(args):
     dataname = args.dataname
 
@@ -42,6 +80,7 @@ def get_input_generate(args):
 
 
     ckpt_dir = f'{curr_dir}/ckpt/{dataname}'
+    disc_dir = f'{curr_dir}/discriminator/ckpt/{dataname}_fewshot'
 
     _, _, categories, d_numerical, num_inverse, cat_inverse = preprocess(dataset_dir, task_type = task_type, inverse = True)
 
@@ -62,7 +101,7 @@ def get_input_generate(args):
     info['pre_decoder'] = pre_decoder
     info['token_dim'] = token_dim
 
-    return train_z, curr_dir, dataset_dir, ckpt_dir, info, num_inverse, cat_inverse
+    return train_z, curr_dir, dataset_dir, ckpt_dir, disc_dir, info, num_inverse, cat_inverse
 
 
  

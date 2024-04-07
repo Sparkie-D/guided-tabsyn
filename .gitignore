@@ -1,0 +1,8 @@
+data/
+synthetic/
+*ckpt/
+*__pycache__/
+
+*.csv
+*.pt
+*.pickle

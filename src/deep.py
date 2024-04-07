@@ -1,6 +1,6 @@
 import statistics
 from dataclasses import dataclass
-from typing import Any, Callable, Literal, cast
+from typing import Any, Callable, Literal, cast, List, Dict, Tuple
 
 # import rtdl
 import torch
@@ -76,7 +76,7 @@ def default_zero_weight_decay_condition(module_name, module, parameter_name, par
 
 def split_parameters_by_weight_decay(
     model: nn.Module, zero_weight_decay_condition=default_zero_weight_decay_condition
-) -> list[dict[str, Any]]:
+) -> List[Dict[str, Any]]:
     parameters_info = {}
     for module_name, module in model.named_modules():
         for parameter_name, parameter in module.named_parameters():
@@ -98,7 +98,7 @@ def split_parameters_by_weight_decay(
 
 
 def make_optimizer(
-    config: dict[str, Any],
+    config: Dict[str, Any],
     parameter_groups,
 ) -> optim.Optimizer:
     if config['optimizer'] == 'FT-Transformer-default':
@@ -130,7 +130,7 @@ def train_with_auto_virtual_batch(
     step,
     batch,
     chunk_size: int,
-) -> tuple[Tensor, int]:
+) -> Tuple[Tensor, int]:
     batch_size = len(batch)
     random_state = zero.random.get_state()
     loss = None
@@ -163,6 +163,6 @@ def train_with_auto_virtual_batch(
     return cast(Tensor, loss), chunk_size
 
 
-def process_epoch_losses(losses: list[Tensor]) -> tuple[list[float], float]:
+def process_epoch_losses(losses: List[Tensor]) -> Tuple[List[float], float]:
     losses_ = torch.stack(losses).tolist()
     return losses_, statistics.mean(losses_)

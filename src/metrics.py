@@ -1,5 +1,5 @@
 import enum
-from typing import Any, Optional, Tuple, Dict, Union, cast
+from typing import Any, Optional, Tuple, Dict, Union, cast, List
 from functools import partial
 
 import numpy as np
@@ -34,10 +34,10 @@ class MetricsReport:
         else:
             raise "Unknown TaskType!"
 
-    def get_splits_names(self) -> list[str]:
+    def get_splits_names(self) -> List[str]:
         return self._res.keys()
 
-    def get_metrics_names(self) -> list[str]:
+    def get_metrics_names(self) -> List[str]:
         return self._metrics_names
 
     def get_metric(self, split: str, metric: str) -> float:
