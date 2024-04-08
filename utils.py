@@ -15,6 +15,9 @@ from tabsyn.vae.main import main as train_vae
 from tabsyn.main import main as train_tabsyn
 from tabsyn.sample import main as sample_tabsyn
 
+from tabsyn.discriminator.main import main as train_discriminator
+from tabsyn.discriminator.sample import main as sample_discriminator
+
 import argparse
 import importlib
 

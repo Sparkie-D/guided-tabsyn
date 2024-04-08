@@ -2,6 +2,7 @@ data/
 synthetic/
 *ckpt/
 *__pycache__/
+logs/
 
 *.csv
 *.pt

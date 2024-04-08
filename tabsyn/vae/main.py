@@ -4,6 +4,7 @@ import torch.nn as nn
 
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.utils.tensorboard import SummaryWriter
 import argparse
 import warnings
 
@@ -61,6 +62,7 @@ def main(args):
     lambd = args.lambd
 
     device =  args.device
+    logger = SummaryWriter(args.logdir)
 
 
     info_path = f'data/{dataname}/info.json'
@@ -79,26 +81,21 @@ def main(args):
 
     X_num, X_cat, categories, d_numerical = preprocess(data_dir, task_type = info['task_type'])
 
-    X_train_num, _ = X_num
-    X_train_cat, _ = X_cat
-
     X_train_num, X_test_num = X_num
     X_train_cat, X_test_cat = X_cat
 
     X_train_num, X_test_num = torch.tensor(X_train_num).float(), torch.tensor(X_test_num).float()
     X_train_cat, X_test_cat =  torch.tensor(X_train_cat), torch.tensor(X_test_cat)
+    
+    if os.path.exists(data_dir+'_fewshot'):
+        X_num_fewshot, X_cat_fewshot, categories_fewshot, d_numerical_fewshot = preprocess(data_dir+'_fewshot', task_type = info['task_type'])
+        print(categories, d_numerical, categories_fewshot, d_numerical_fewshot)
 
-    X_num_fewshot, X_cat_fewshot, categories_fewshot, d_numerical_fewshot = preprocess(data_dir+'_fewshot', task_type = info['task_type'])
-    print(categories, d_numerical, categories_fewshot, d_numerical_fewshot)
+        X_train_num_fewshot, X_test_num_fewshot = X_num_fewshot
+        X_train_cat_fewshot, X_test_cat_fewshot = X_cat_fewshot
 
-    X_train_num_fewshot, _ = X_num_fewshot
-    X_train_cat_fewshot, _ = X_cat_fewshot
-
-    X_train_num_fewshot, X_test_num_fewshot = X_num_fewshot
-    X_train_cat_fewshot, X_test_cat_fewshot = X_cat_fewshot
-
-    X_train_num_fewshot, X_test_num_fewshot = torch.tensor(X_train_num_fewshot).float(), torch.tensor(X_test_num_fewshot).float()
-    X_train_cat_fewshot, X_test_cat_fewshot =  torch.tensor(X_train_cat_fewshot), torch.tensor(X_test_cat_fewshot)
+        X_train_num_fewshot, X_test_num_fewshot = torch.tensor(X_train_num_fewshot).float(), torch.tensor(X_test_num_fewshot).float()
+        X_train_cat_fewshot, X_test_cat_fewshot =  torch.tensor(X_train_cat_fewshot), torch.tensor(X_test_cat_fewshot)
 
     train_data = TabularDataset(X_train_num.float(), X_train_cat)
 
@@ -125,7 +122,7 @@ def main(args):
     optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=WD)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.95, patience=10, verbose=True)
 
-    num_epochs = 200
+    num_epochs = 10000
     best_train_loss = float('inf')
 
     current_lr = optimizer.param_groups[0]['lr']
@@ -133,73 +130,82 @@ def main(args):
 
     beta = max_beta
     start_time = time.time()
-    for epoch in range(num_epochs):
-        pbar = tqdm(train_loader, total=len(train_loader))
-        pbar.set_description(f"Epoch {epoch+1}/{num_epochs}")
-
-        curr_loss_multi = 0.0
-        curr_loss_gauss = 0.0
-        curr_loss_kl = 0.0
-
-        curr_count = 0
-
-        for batch_num, batch_cat in pbar:
-            model.train()
-            optimizer.zero_grad()
-
-            batch_num = batch_num.to(device)
-            batch_cat = batch_cat.to(device)
-
-            Recon_X_num, Recon_X_cat, mu_z, std_z = model(batch_num, batch_cat)
+    with tqdm(total=num_epochs) as pbar:
+        pbar.set_description(f"Training {args.method}")
         
-            loss_mse, loss_ce, loss_kld, train_acc = compute_loss(batch_num, batch_cat, Recon_X_num, Recon_X_cat, mu_z, std_z)
+        for epoch in range(num_epochs):
+            curr_loss_multi = 0.0
+            curr_loss_gauss = 0.0
+            curr_loss_kl = 0.0
+            curr_count = 0
 
-            loss = loss_mse + loss_ce + beta * loss_kld
-            loss.backward()
-            optimizer.step()
+            for batch_num, batch_cat in train_loader:
+                model.train()
+                optimizer.zero_grad()
 
-            batch_length = batch_num.shape[0]
-            curr_count += batch_length
-            curr_loss_multi += loss_ce.item() * batch_length
-            curr_loss_gauss += loss_mse.item() * batch_length
-            curr_loss_kl    += loss_kld.item() * batch_length
+                batch_num = batch_num.to(device)
+                batch_cat = batch_cat.to(device)
 
-        num_loss = curr_loss_gauss / curr_count
-        cat_loss = curr_loss_multi / curr_count
-        kl_loss = curr_loss_kl / curr_count
-        
+                Recon_X_num, Recon_X_cat, mu_z, std_z = model(batch_num, batch_cat)
+            
+                loss_mse, loss_ce, loss_kld, train_acc = compute_loss(batch_num, batch_cat, Recon_X_num, Recon_X_cat, mu_z, std_z)
 
-        '''
-            Evaluation
-        '''
-        model.eval()
-        with torch.no_grad():
-            Recon_X_num, Recon_X_cat, mu_z, std_z = model(X_test_num, X_test_cat)
+                loss = loss_mse + loss_ce + beta * loss_kld
+                loss.backward()
+                optimizer.step()
 
-            val_mse_loss, val_ce_loss, val_kl_loss, val_acc = compute_loss(X_test_num, X_test_cat, Recon_X_num, Recon_X_cat, mu_z, std_z)
-            val_loss = val_mse_loss.item() * 0 + val_ce_loss.item()    
+                batch_length = batch_num.shape[0]
+                curr_count += batch_length
+                curr_loss_multi += loss_ce.item() * batch_length
+                curr_loss_gauss += loss_mse.item() * batch_length
+                curr_loss_kl    += loss_kld.item() * batch_length
 
-            scheduler.step(val_loss)
-            new_lr = optimizer.param_groups[0]['lr']
+            num_loss = curr_loss_gauss / curr_count
+            cat_loss = curr_loss_multi / curr_count
+            kl_loss = curr_loss_kl / curr_count
+            
+            logger.add_scalar('train/MSE', num_loss, epoch)
+            logger.add_scalar('train/CE', cat_loss, epoch)
+            logger.add_scalar('train/KL', kl_loss, epoch)
+            logger.add_scalar('train/total loss', num_loss+cat_loss+kl_loss, epoch)
+            logger.add_scalar('train/accuracy', train_acc.item(), epoch)
 
-            if new_lr != current_lr:
-                current_lr = new_lr
-                print(f"Learning rate updated: {current_lr}")
-                
-            train_loss = val_loss
-            if train_loss < best_train_loss:
-                best_train_loss = train_loss
-                patience = 0
-                torch.save(model.state_dict(), model_save_path)
-            else:
-                patience += 1
-                if patience == 10:
-                    if beta > min_beta:
-                        beta = beta * lambd
+            '''
+                Evaluation
+            '''
+            model.eval()
+            with torch.no_grad():
+                Recon_X_num, Recon_X_cat, mu_z, std_z = model(X_test_num, X_test_cat)
 
+                val_mse_loss, val_ce_loss, val_kl_loss, val_acc = compute_loss(X_test_num, X_test_cat, Recon_X_num, Recon_X_cat, mu_z, std_z)
+                val_loss = val_mse_loss.item() * 0 + val_ce_loss.item()    
+
+                scheduler.step(val_loss)
+                new_lr = optimizer.param_groups[0]['lr']
+
+                if new_lr != current_lr:
+                    current_lr = new_lr
+                    print(f"Learning rate updated: {current_lr}")
+                    
+                train_loss = val_loss
+                if train_loss < best_train_loss:
+                    best_train_loss = train_loss
+                    patience = 0
+                    torch.save(model.state_dict(), model_save_path)
+                else:
+                    patience += 1
+                    if patience == 10:
+                        if beta > min_beta:
+                            beta = beta * lambd
+                            
+                logger.add_scalar('evaluate/MSE', val_mse_loss.item(), epoch)
+                logger.add_scalar('evaluate/CE', val_ce_loss.item(), epoch)
+                logger.add_scalar('evaluate/accuracy', val_acc.item(), epoch)
+            
+            pbar.update(1)
 
         # print('epoch: {}, beta = {:.6f}, Train MSE: {:.6f}, Train CE:{:.6f}, Train KL:{:.6f}, Train ACC:{:6f}'.format(epoch, beta, num_loss, cat_loss, kl_loss, train_acc.item()))
-        print('epoch: {}, beta = {:.6f}, Train MSE: {:.6f}, Train CE:{:.6f}, Train KL:{:.6f}, Val MSE:{:.6f}, Val CE:{:.6f}, Train ACC:{:6f}, Val ACC:{:6f}'.format(epoch, beta, num_loss, cat_loss, kl_loss, val_mse_loss.item(), val_ce_loss.item(), train_acc.item(), val_acc.item() ))
+        # print('epoch: {}, beta = {:.6f}, Train MSE: {:.6f}, Train CE:{:.6f}, Train KL:{:.6f}, Val MSE:{:.6f}, Val CE:{:.6f}, Train ACC:{:6f}, Val ACC:{:6f}'.format(epoch, beta, num_loss, cat_loss, kl_loss, val_mse_loss.item(), val_ce_loss.item(), train_acc.item(), val_acc.item() ))
 
     end_time = time.time()
     print('Training time: {:.4f} mins'.format((end_time - start_time)/60))
@@ -212,21 +218,22 @@ def main(args):
         torch.save(pre_encoder.state_dict(), encoder_save_path)
         torch.save(pre_decoder.state_dict(), decoder_save_path)
 
+        print('Successfully load and save the model!')
+        
         X_train_num = X_train_num.to(device)
         X_train_cat = X_train_cat.to(device)
-
-        print('Successfully load and save the model!')
-
-        train_z = pre_encoder(X_train_num, X_train_cat).detach().cpu().numpy()\
+        train_z = pre_encoder(X_train_num, X_train_cat).detach().cpu().numpy()
 
         np.save(f'{ckpt_dir}/train_z.npy', train_z)
-            
-        X_train_num_fewshot = X_train_num_fewshot.to(device)
-        X_train_cat_fewshot = X_train_cat_fewshot.to(device)
-        train_z_fewshot = pre_encoder(X_train_num_fewshot, X_train_cat_fewshot).detach().cpu().numpy()
-        np.save(f'{ckpt_dir}_fewshot/train_z.npy', train_z)
-
         print('Successfully save pretrained embeddings in disk!')
+
+        if os.path.exists(data_dir+'_fewshot'):
+            X_train_num_fewshot = X_train_num_fewshot.to(device)
+            X_train_cat_fewshot = X_train_cat_fewshot.to(device)
+            train_z_fewshot = pre_encoder(X_train_num_fewshot, X_train_cat_fewshot).detach().cpu().numpy()
+            np.save(f'{ckpt_dir}_fewshot/train_z.npy', train_z_fewshot)
+
+            print('Successfully save pretrained embeddings for fewshot in disk!')
 
 if __name__ == '__main__':
 
@@ -239,7 +246,6 @@ if __name__ == '__main__':
     parser.add_argument('--lambd', type=float, default=0.7, help='Decay of Beta.')
 
     args = parser.parse_args()
-
     # check cuda
     if args.gpu != -1 and torch.cuda.is_available():
         args.device = 'cuda:{}'.format(args.gpu)

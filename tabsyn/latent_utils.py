@@ -29,12 +29,12 @@ def get_input_train(args):
 
 
 def get_input_generate_disc(args):
-    dataname = args.dataname
-    pretrain_name = args.dataname.replace('_fewshot', '')
+    fewshot_name = args.dataname + '_fewshot'
+    pretrain_name = args.dataname
     curr_dir = os.path.dirname(os.path.abspath(__file__))
-    dataset_dir = f'data/{dataname}'
+    dataset_dir = f'data/{fewshot_name}'
     pretrain_dir = dataset_dir.replace('_fewshot', '')
-    ckpt_dir = f'{curr_dir}/ckpt/{dataname}'
+    ckpt_dir = f'{curr_dir}/ckpt/{fewshot_name}'
 
     with open(f'{dataset_dir}/info.json', 'r') as f:
         info = json.load(f)
@@ -43,11 +43,11 @@ def get_input_generate_disc(args):
 
 
     ckpt_dir = f'{curr_dir}/ckpt/{pretrain_name}'
-    disc_dir = f'{curr_dir}/discriminator/ckpt/{dataname}'
+    disc_dir = f'{curr_dir}/discriminator/ckpt/{fewshot_name}'
 
     _, _, categories, d_numerical, num_inverse, cat_inverse = preprocess(pretrain_dir, task_type = task_type, inverse = True)
 
-    embedding_save_path = f'{curr_dir}/vae/ckpt/{dataname}/train_z.npy'
+    embedding_save_path = f'{curr_dir}/vae/ckpt/{fewshot_name}/train_z.npy'
     train_z = torch.tensor(np.load(embedding_save_path)).float()
 
     train_z = train_z[:, 1:, :]

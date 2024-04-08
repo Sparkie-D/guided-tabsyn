@@ -7,8 +7,9 @@ from torch.utils.data.sampler import WeightedRandomSampler
 from tabsyn.ddpm import DDPM
 import argparse
 from tabsyn.latent_utils import get_input_generate_disc as get_input_generate
-from model import discriminator
+from tabsyn.discriminator.model import discriminator
 import numpy as np
+from torch.utils.tensorboard import SummaryWriter
 
 class Trainer(object):
     def __init__(self, 
@@ -16,7 +17,7 @@ class Trainer(object):
                  pos_data,
                  neg_data, 
                  valid_data, 
-                #  logger,
+                 logger,
                 #  args,
                 model_path,
                  device,
@@ -24,7 +25,7 @@ class Trainer(object):
         self.pos_data = pos_data
         self.neg_data = neg_data
         self.valid_data = valid_data
-        # self.logger = logger
+        self.logger = logger
         self.device = device
         self.model = model
         # self.log_path = args.log_path
@@ -70,7 +71,7 @@ class Trainer(object):
         for epoch in tqdm(range(num_epoch), desc='Training'):
             loss = self.train_epoch(neg_loader, pos_loader)
             
-            # self.logger.add_scalar('train/loss', loss, epoch)
+            self.logger.add_scalar('train/loss', loss, epoch)
             
             self.eval_epoch(batch_size, epoch)
             
@@ -93,8 +94,8 @@ class Trainer(object):
         pos_pred = torch.sigmoid(torch.cat(pos_pred))
         neg_pred = torch.sigmoid(torch.cat(neg_pred))
         # print(pos_pred, neg_pred)
-        # self.logger.add_histogram('eval/pos_prediction', pos_pred, epoch)
-        # self.logger.add_histogram('eval/neg_prediction', neg_pred, epoch)            
+        self.logger.add_histogram('eval/pos_prediction', pos_pred, epoch)
+        self.logger.add_histogram('eval/neg_prediction', neg_pred, epoch)            
 
    
     def _gradient_penalty(self, real_data, generated_data, LAMBDA=10):
@@ -121,45 +122,54 @@ class Trainer(object):
 
         # Return gradient penalty
         return LAMBDA * ((gradients.norm(2, dim=1) - 1) ** 2).mean()
-    
-if __name__ == '__main__':
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--dataname', type=str, default='pksim_fewshot')
-    
-    args = parser.parse_args()
+
+def main(args):
     pos_data, _, _, ckpt_path, disc_path, info, num_inverse, cat_inverse = get_input_generate(args)
+    in_dim = pos_data.shape[1]
     
     model = DDPM(
         num_layers=3,
-        input_dim=pos_data.shape[1],
-        hidden_dim=256,
+        input_dim=in_dim,
+        hidden_dim=1024,
         n_steps=1000,
         diff_lr=1e-3,
-        device=device
+        device=args.device
     )
+    
+    model.load_state_dict(torch.load(f'tabsyn/ckpt/{args.dataname}/model.pt'))
 
-    model_name = args.dataname.replace('_fewshot', '')
-    model.load_state_dict(torch.load(f'tabsyn/ckpt/{model_name}/model.pt'))
-
-    args.dataname = model_name
     train_z, _, _, ckpt_path, disc_path, info, num_inverse, cat_inverse = get_input_generate(args)
     mean = train_z.mean(0)
     x_next = model.sample_wo_guidance(batch_size=256,
                                       n_samples=1024,)
 
-    neg_data = x_next.astype(np.float32) * 2 + mean.to(device).detach().cpu().numpy()
+    neg_data = x_next.astype(np.float32) * 2 + mean.to(args.device).detach().cpu().numpy()
 
     trainer = Trainer(
         model=discriminator(input_dim=train_z.shape[1], 
                             hidden_dims=4,
-                            device=device),
+                            device=args.device),
         # model=model,
         pos_data=pos_data,
         neg_data=neg_data,
         valid_data=train_z,
-        device=device,
+        device=args.device,
+        logger=SummaryWriter(args.logdir),
         model_path=f'tabsyn/discriminator/ckpt/{args.dataname}_fewshot'
     )
     trainer.train(batch_size=256,
                   num_epoch=100)
+    
+# if __name__ == '__main__':
+    # device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument('--dataname', type=str, default='pksim')
+    # parser.add_argument('--method', type=str, default='discriminator')
+    
+    # args = parser.parse_args()
+    # assert os.path.exists(os.path.join('data', args.dataname+'_fewshot')), f"The dataset [{args.dataname}] have no fewshot dataset yet."
+    
+    # args.logdir=os.path.join('logs', f'{args.dataname}', f'{args.method}')
+    # if not os.path.exists(args.logdir):
+    #     os.makedirs(args.logdir)
+   

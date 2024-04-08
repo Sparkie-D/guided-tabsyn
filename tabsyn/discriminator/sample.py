@@ -5,8 +5,11 @@ import warnings
 import time
 import numpy as np
 
+# from tabsyn.model import MLPDiffusion, Model
 from tabsyn.ddpm import DDPM
 from tabsyn.latent_utils import get_input_generate, recover_data, split_num_cat_target
+# from tabsyn.diffusion_utils import sample
+import pickle
 from tabsyn.discriminator.model import discriminator
 
 warnings.filterwarnings('ignore')
@@ -33,22 +36,25 @@ def main(args):
     )
 
     model.load_state_dict(torch.load(f'{ckpt_path}/model.pt'))
-    
-
-    '''
-        Generating samples    
-    '''
     start_time = time.time()
-
     num_samples = train_z.shape[0]
 
-    # x_next = model.universal_guided_sample()
-    x_next = model.sample_wo_guidance(batch_size=256,
-                                      n_samples=num_samples,)
+    
+    disc_model = discriminator(input_dim=in_dim, 
+                               hidden_dims=4,
+                               device=device)
+    with open(f'{disc_path}/discriminator.pickle', 'rb') as f:
+        disc_model.load_state_dict(pickle.load(f))
+        
+    x_next = model.universal_guided_sample(batch_size=256,
+                                           n_samples=num_samples,
+                                           disc_model=disc_model,
+                                           forward_weight=10,
+                                           backward_step=0,
+                                           self_recurrent_step=1)
 
     syn_data = x_next.astype(np.float32) * 2 + mean.to(device).detach().cpu().numpy()
     
-    # syn_data = x_next.float().cpu().numpy()
     syn_num, syn_cat, syn_target = split_num_cat_target(syn_data, info, num_inverse, cat_inverse, args.device) 
 
     syn_df = recover_data(syn_num, syn_cat, syn_target, info)

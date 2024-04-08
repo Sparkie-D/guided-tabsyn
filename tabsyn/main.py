@@ -11,6 +11,7 @@ from tqdm import tqdm
 # from tabsyn.model import MLPDiffusion, Model
 from tabsyn.ddpm import DDPM
 from tabsyn.latent_utils import get_input_train
+from torch.utils.tensorboard import SummaryWriter
 
 warnings.filterwarnings('ignore')
 
@@ -21,6 +22,7 @@ def main(args):
     train_z, _, _, ckpt_path, _ = get_input_train(args)
 
     print(ckpt_path)
+    logger = SummaryWriter(args.logdir)
 
     if not os.path.exists(ckpt_path):
         os.makedirs(ckpt_path)
@@ -41,7 +43,7 @@ def main(args):
         num_workers = 4,
     )
 
-    num_epochs = 10000 + 1
+    num_epochs = 20000 + 1
 
     # denoise_fn = MLPDiffusion(in_dim, 1024).to(device)
     # print(denoise_fn)
@@ -49,7 +51,7 @@ def main(args):
     model = DDPM(
         num_layers=3,
         input_dim=in_dim,
-        hidden_dim=256,
+        hidden_dim=1024,
         n_steps=1000,
         diff_lr=1e-3,
         device=device
@@ -68,38 +70,39 @@ def main(args):
     best_loss = float('inf')
     patience = 0
     start_time = time.time()
-    for epoch in range(num_epochs):
+    with tqdm(total=num_epochs) as pbar:
+        pbar.set_description(f"Training {args.method}")
+        for epoch in range(num_epochs):
         
-        pbar = tqdm(train_loader, total=len(train_loader))
-        pbar.set_description(f"Epoch {epoch+1}/{num_epochs}")
+            batch_loss = 0.0
+            len_input = 0
+            for batch in train_loader:
+                inputs = batch.float().to(device)
+                # loss = model(inputs)
+                loss = model.update(inputs)
 
-        batch_loss = 0.0
-        len_input = 0
-        for batch in pbar:
-            inputs = batch.float().to(device)
-            # loss = model(inputs)
-            loss = model.update(inputs)
+                batch_loss += loss * len(inputs)
+                len_input += len(inputs)
+                
+            curr_loss = batch_loss/len_input
+            # pbar.set_postfix({"Loss": curr_loss})
+            logger.add_scalar('train/loss', curr_loss, epoch)
+            
+            if curr_loss < best_loss:
+                best_loss = loss
+                patience = 0
+                torch.save(model.state_dict(), f'{ckpt_path}/model.pt')
+            # else:
+            #     patience += 1
+            #     if patience == 500:
+            #         print('Early stopping')
+            #         break
 
-            batch_loss += loss * len(inputs)
-            len_input += len(inputs)
-
-            pbar.set_postfix({"Loss": loss})
-
-        curr_loss = batch_loss/len_input
-
-        if curr_loss < best_loss:
-            best_loss = loss
-            patience = 0
-            torch.save(model.state_dict(), f'{ckpt_path}/model.pt')
-        else:
-            patience += 1
-            if patience == 500:
-                print('Early stopping')
-                break
-
-        if epoch % 100 == 0:
-            torch.save(model.state_dict(), f'{ckpt_path}/model_{epoch}.pt')
-
+            if epoch % 100 == 0:
+                torch.save(model.state_dict(), f'{ckpt_path}/model_{epoch}.pt')
+                
+            pbar.update(1)
+            
     end_time = time.time()
     print('Time: ', end_time - start_time)
 
