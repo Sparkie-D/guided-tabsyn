@@ -11,12 +11,16 @@ from baselines.codi.sample import main as sample_codi
 from baselines.stasy.sample import main as sample_stasy
 from baselines.tabddpm.main_sample import main as sample_tabddpm
 
-from tabsyn.vae.main import main as train_vae
+from vae.main import main as train_vae
+
 from tabsyn.main import main as train_tabsyn
 from tabsyn.sample import main as sample_tabsyn
 
-from tabsyn.discriminator.main import main as train_discriminator
-from tabsyn.discriminator.sample import main as sample_discriminator
+from tabsyn.main import main as train_ddpm
+from tabsyn.sample import main as sample_ddpm
+
+from ddpm.discriminator.main import main as train_discriminator
+from ddpm.discriminator.sample import main as sample_discriminator
 
 import argparse
 import importlib
@@ -105,6 +109,12 @@ def get_args():
     parser.add_argument('--cond_size', type=int, help='cond_size')
     parser.add_argument('--output_size', type=int, help='output_size')
     parser.add_argument('--activation', type=str, default='relu', help='activation')
+    
+    # DDPM Architecture
+    parser.add_argument('--ddpm_num_layers', type=int, default=3)
+    parser.add_argument('--ddpm_hidden_dim', type=int, default=1024)
+    parser.add_argument('--ddpm_steps', type=int, default=1000)
+    parser.add_argument('--ddpm_lr', type=float, default=1e-3)
 
     # Training
     parser.add_argument('--training_batch_size', type=int, default=4096, help='batch size')
@@ -148,6 +158,15 @@ def get_args():
     # configs for sampling
     parser.add_argument('--save_path', type=str, default=None, help='Path to save synthetic data.')
     parser.add_argument('--steps', type=int, default=50, help='NFEs.')
+    parser.add_argument('--sample_batch_size', type=int, default=256)
+    
+    # configs for discriminator
+    parser.add_argument('--disc_hidden_dim', type=int, default=4)
+    
+    # configs for discriminator sampling
+    parser.add_argument('--forward_weight', '-f', type=float, default=1., help='Guidance weight in forward guidance steps')
+    parser.add_argument('--backward_steps', '-b', type=int, default=0, help='Num of gradient descent steps in backward guidance steps')
+    parser.add_argument('--self_recurrent', '-r', type=int, default=1, help='Num of recurrent steps in self-recurrent steps')
     
     args = parser.parse_args()
 

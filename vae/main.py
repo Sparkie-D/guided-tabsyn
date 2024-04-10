@@ -13,7 +13,7 @@ from tqdm import tqdm
 import json
 import time
 
-from tabsyn.vae.model import Model_VAE, Encoder_model, Decoder_model
+from vae.model import Model_VAE, Encoder_model, Decoder_model
 from utils_train import preprocess, TabularDataset
 
 warnings.filterwarnings('ignore')
@@ -232,6 +232,11 @@ def main(args):
             X_train_cat_fewshot = X_train_cat_fewshot.to(device)
             train_z_fewshot = pre_encoder(X_train_num_fewshot, X_train_cat_fewshot).detach().cpu().numpy()
             np.save(f'{ckpt_dir}_fewshot/train_z.npy', train_z_fewshot)
+            
+            X_test_num_fewshot = X_test_num_fewshot.to(device)
+            X_test_cat_fewshot = X_test_cat_fewshot.to(device)
+            test_z_fewshot = pre_encoder(X_test_num_fewshot, X_test_cat_fewshot).detach().cpu().numpy()
+            np.save(f'{ckpt_dir}_fewshot/test_z.npy', test_z_fewshot)
 
             print('Successfully save pretrained embeddings for fewshot in disk!')
 

@@ -96,13 +96,14 @@ class DDPM(nn.Module):
             x[start:end] = batch_x.cpu().detach().numpy()
         
         return x
+    
 
     def forward_guidance(self, disc_model, z0, zt):
         preds = disc_model(z0)
         loss = -torch.sum(torch.log(torch.sigmoid(preds)))
         guidance = torch.autograd.grad(loss, zt)
-        return torch.sqrt(torch.abs(guidance[0])) * torch.sign(guidance[0])
-        # return guidance[0]
+        # return torch.sqrt(torch.abs(guidance[0])) * torch.sign(guidance[0])
+        return guidance[0]
         
     def backward_guidance(self, disc_model, z0, m):
         delta = torch.zeros_like(z0, requires_grad=True)
@@ -168,8 +169,8 @@ class MLPDiffusion(nn.Module):
     def _init_net(self):
         for layer in self.modules():
             if isinstance(layer, torch.nn.Linear):
-                nn.init.orthogonal_(layer.weight)
-                # nn.init.kaiming_uniform_(layer.weight) # no difference 
+                # nn.init.orthogonal_(layer.weight)
+                nn.init.kaiming_uniform_(layer.weight) # no difference 
 
     def forward(self, x, t):
         for idx, embedding_layer in enumerate(self.embeddings):	

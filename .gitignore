@@ -7,3 +7,8 @@ logs/
 *.csv
 *.pt
 *.pickle
+*.png
+*.txt
+*.npy
+*.npz
+

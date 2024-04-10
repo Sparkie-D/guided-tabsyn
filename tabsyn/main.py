@@ -8,10 +8,8 @@ import warnings
 import time
 
 from tqdm import tqdm
-# from tabsyn.model import MLPDiffusion, Model
-from tabsyn.ddpm import DDPM
+from tabsyn.model import MLPDiffusion, Model
 from tabsyn.latent_utils import get_input_train
-from torch.utils.tensorboard import SummaryWriter
 
 warnings.filterwarnings('ignore')
 
@@ -22,7 +20,6 @@ def main(args):
     train_z, _, _, ckpt_path, _ = get_input_train(args)
 
     print(ckpt_path)
-    logger = SummaryWriter(args.logdir)
 
     if not os.path.exists(ckpt_path):
         os.makedirs(ckpt_path)
@@ -43,66 +40,62 @@ def main(args):
         num_workers = 4,
     )
 
-    num_epochs = 20000 + 1
+    num_epochs = 10000 + 1
 
-    # denoise_fn = MLPDiffusion(in_dim, 1024).to(device)
-    # print(denoise_fn)
-    
-    model = DDPM(
-        num_layers=3,
-        input_dim=in_dim,
-        hidden_dim=1024,
-        n_steps=1000,
-        diff_lr=1e-3,
-        device=device
-    )
+    denoise_fn = MLPDiffusion(in_dim, 1024).to(device)
+    print(denoise_fn)
 
-    num_params = sum(p.numel() for p in model.diffuser.parameters())
+    num_params = sum(p.numel() for p in denoise_fn.parameters())
     print("the number of parameters", num_params)
 
-    # model = Model(denoise_fn = denoise_fn, hid_dim = train_z.shape[1]).to(device)
+    model = Model(denoise_fn = denoise_fn, hid_dim = train_z.shape[1]).to(device)
 
-    # optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=0)
-    # scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.9, patience=20, verbose=True)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=0)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.9, patience=20, verbose=True)
 
     model.train()
 
     best_loss = float('inf')
     patience = 0
     start_time = time.time()
-    with tqdm(total=num_epochs) as pbar:
-        pbar.set_description(f"Training {args.method}")
-        for epoch in range(num_epochs):
+    for epoch in range(num_epochs):
         
-            batch_loss = 0.0
-            len_input = 0
-            for batch in train_loader:
-                inputs = batch.float().to(device)
-                # loss = model(inputs)
-                loss = model.update(inputs)
+        pbar = tqdm(train_loader, total=len(train_loader))
+        pbar.set_description(f"Epoch {epoch+1}/{num_epochs}")
 
-                batch_loss += loss * len(inputs)
-                len_input += len(inputs)
-                
-            curr_loss = batch_loss/len_input
-            # pbar.set_postfix({"Loss": curr_loss})
-            logger.add_scalar('train/loss', curr_loss, epoch)
-            
-            if curr_loss < best_loss:
-                best_loss = loss
-                patience = 0
-                torch.save(model.state_dict(), f'{ckpt_path}/model.pt')
-            # else:
-            #     patience += 1
-            #     if patience == 500:
-            #         print('Early stopping')
-            #         break
+        batch_loss = 0.0
+        len_input = 0
+        for batch in pbar:
+            inputs = batch.float().to(device)
+            loss = model(inputs)
+        
+            loss = loss.mean()
 
-            if epoch % 100 == 0:
-                torch.save(model.state_dict(), f'{ckpt_path}/model_{epoch}.pt')
-                
-            pbar.update(1)
-            
+            batch_loss += loss.item() * len(inputs)
+            len_input += len(inputs)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            pbar.set_postfix({"Loss": loss.item()})
+
+        curr_loss = batch_loss/len_input
+        scheduler.step(curr_loss)
+
+        if curr_loss < best_loss:
+            best_loss = loss.item()
+            patience = 0
+            torch.save(model.state_dict(), f'{ckpt_path}/model.pt')
+        else:
+            patience += 1
+            if patience == 500:
+                print('Early stopping')
+                break
+
+        if epoch % 1000 == 0:
+            torch.save(model.state_dict(), f'{ckpt_path}/model_{epoch}.pt')
+
     end_time = time.time()
     print('Time: ', end_time - start_time)
 

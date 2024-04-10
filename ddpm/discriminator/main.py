@@ -4,10 +4,10 @@ import pickle
 import os
 from tqdm import tqdm
 from torch.utils.data.sampler import WeightedRandomSampler
-from tabsyn.ddpm import DDPM
+from ddpm.ddpm import DDPM
 import argparse
-from tabsyn.latent_utils import get_input_generate_disc as get_input_generate
-from tabsyn.discriminator.model import discriminator
+from ddpm.latent_utils import get_input_generate_disc as get_input_generate
+from ddpm.discriminator.model import discriminator
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 
@@ -16,7 +16,8 @@ class Trainer(object):
                  model,
                  pos_data,
                  neg_data, 
-                 valid_data, 
+                 valid_pos,
+                 valid_neg, 
                  logger,
                 #  args,
                 model_path,
@@ -24,7 +25,8 @@ class Trainer(object):
                  ) -> None:
         self.pos_data = pos_data
         self.neg_data = neg_data
-        self.valid_data = valid_data
+        self.valid_pos = valid_pos
+        self.valid_neg = valid_neg
         self.logger = logger
         self.device = device
         self.model = model
@@ -47,7 +49,7 @@ class Trainer(object):
             pos_pred = self.model(pos_data)
             neg_pred = self.model(neg_data)
             
-            learner_loss = -torch.mean(torch.log(1 - torch.sigmoid(neg_pred)))
+            learner_loss = -torch.mean(torch.log(1- torch.sigmoid(neg_pred)))
             expert_loss = -torch.mean(torch.log(torch.sigmoid(pos_pred)))
             
             loss = learner_loss + expert_loss + self._gradient_penalty(neg_data, pos_data, LAMBDA=0)
@@ -80,9 +82,9 @@ class Trainer(object):
                     pickle.dump(self.model.state_dict(), f)
 
     def eval_epoch(self, batch_size, epoch):
-        sampler = WeightedRandomSampler(weights=torch.ones(len(self.pos_data)), num_samples=batch_size, replacement=True)
-        pos_loader = torch.utils.data.DataLoader(self.valid_data, batch_size=batch_size, sampler=sampler)
-        neg_loader = torch.utils.data.DataLoader(self.neg_data, batch_size=batch_size, shuffle=True) 
+        sampler = WeightedRandomSampler(weights=torch.ones(len(self.valid_pos)), num_samples=batch_size, replacement=True)
+        pos_loader = torch.utils.data.DataLoader(self.valid_pos, batch_size=batch_size, sampler=sampler)
+        neg_loader = torch.utils.data.DataLoader(self.valid_neg, batch_size=batch_size, shuffle=True) 
         pos_pred, neg_pred = [], []
         
         for i, (neg_data, pos_data) in enumerate(zip(neg_loader, pos_loader)):
@@ -124,52 +126,44 @@ class Trainer(object):
         return LAMBDA * ((gradients.norm(2, dim=1) - 1) ** 2).mean()
 
 def main(args):
-    pos_data, _, _, ckpt_path, disc_path, info, num_inverse, cat_inverse = get_input_generate(args)
-    in_dim = pos_data.shape[1]
+    train_pos, valid_pos, info = get_input_generate(args) # decoder in info
+    mean = train_pos.mean(0)
+    in_dim = train_pos.shape[1]
     
     model = DDPM(
-        num_layers=3,
+        num_layers=args.ddpm_num_layers,
         input_dim=in_dim,
-        hidden_dim=1024,
-        n_steps=1000,
-        diff_lr=1e-3,
+        hidden_dim=args.ddpm_hidden_dim,
+        n_steps=args.ddpm_steps,
+        diff_lr=args.ddpm_lr,
         device=args.device
     )
-    
     model.load_state_dict(torch.load(f'tabsyn/ckpt/{args.dataname}/model.pt'))
-
-    train_z, _, _, ckpt_path, disc_path, info, num_inverse, cat_inverse = get_input_generate(args)
-    mean = train_z.mean(0)
-    x_next = model.sample_wo_guidance(batch_size=256,
-                                      n_samples=1024,)
-
-    neg_data = x_next.astype(np.float32) * 2 + mean.to(args.device).detach().cpu().numpy()
+    
+    print('Pre-sampling for discriminator training')
+    x_train = model.sample_wo_guidance(batch_size=args.sample_batch_size,
+                                       n_samples=train_pos.shape[0],)
+    
+    x_test = model.sample_wo_guidance(batch_size=args.sample_batch_size,
+                                      n_samples=valid_pos.shape[0],)
+    print('Samping finished.')
+    train_neg = x_train.astype(np.float32) * 2 + mean.to(args.device).detach().cpu().numpy()
+    valid_neg = x_test.astype(np.float32) * 2 + mean.to(args.device).detach().cpu().numpy()
+    
 
     trainer = Trainer(
-        model=discriminator(input_dim=train_z.shape[1], 
-                            hidden_dims=4,
+        model=discriminator(input_dim=in_dim, 
+                            hidden_dims=args.disc_hidden_dim,
                             device=args.device),
-        # model=model,
-        pos_data=pos_data,
-        neg_data=neg_data,
-        valid_data=train_z,
+        pos_data=train_pos,
+        neg_data=train_neg,
+        valid_pos=valid_pos,
+        valid_neg=valid_neg,
         device=args.device,
         logger=SummaryWriter(args.logdir),
-        model_path=f'tabsyn/discriminator/ckpt/{args.dataname}_fewshot'
+        model_path=f'tabsyn/discriminator/ckpt/{args.dataname}'
     )
-    trainer.train(batch_size=256,
+    trainer.train(batch_size=32,
                   num_epoch=100)
-    
-# if __name__ == '__main__':
-    # device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument('--dataname', type=str, default='pksim')
-    # parser.add_argument('--method', type=str, default='discriminator')
-    
-    # args = parser.parse_args()
-    # assert os.path.exists(os.path.join('data', args.dataname+'_fewshot')), f"The dataset [{args.dataname}] have no fewshot dataset yet."
-    
-    # args.logdir=os.path.join('logs', f'{args.dataname}', f'{args.method}')
-    # if not os.path.exists(args.logdir):
-    #     os.makedirs(args.logdir)
+
    
