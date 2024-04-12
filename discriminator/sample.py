@@ -8,7 +8,7 @@ import numpy as np
 from tabsyn.model import MLPDiffusion, Model
 from ddpm.ddpm import DDPM
 from utils.latent_utils import get_input_generate, recover_data, split_num_cat_target
-from utils.diffusion_utils import sample
+from utils.diffusion_utils import sample, guided_sample
 import pickle
 from discriminator.model import discriminator
 
@@ -30,7 +30,7 @@ def main(args):
     
     print(f"loading discriminator at {disc_path}")
     disc_model = discriminator(input_dim=in_dim, 
-                               hidden_dims=args.disc_hidden_dim,
+                               hidden_dim=args.disc_hidden_dim,
                                device=args.device)
     with open(f'{disc_path}/discriminator.pickle', 'rb') as f:
         disc_model.load_state_dict(pickle.load(f))
@@ -38,22 +38,20 @@ def main(args):
     print(f"loading synther model at {ckpt_path}")
     if args.method == 'ddpm':
         model = DDPM(
-            num_layers=args.ddpm_num_layers,
             input_dim=in_dim,
             hidden_dim=args.ddpm_hidden_dim,
             n_steps=args.ddpm_steps,
-            diff_lr=args.ddpm_lr,
             device=args.device
         )
         model.load_state_dict(torch.load(f'{ckpt_path}/model.pt'))
         model.eval()
         
         x_next = model.universal_guided_sample(batch_size=args.sample_batch_size,
-                                        n_samples=num_samples,
-                                        disc_model=disc_model,
-                                        forward_weight=args.forward_weight,
-                                        backward_step=args.backward_steps,
-                                        self_recurrent_step=args.self_recurrent)
+                                               n_samples=num_samples,
+                                               disc_model=disc_model,
+                                               forward_weight=args.forward_weight,
+                                               backward_step=args.backward_steps,
+                                               self_recurrent_step=args.self_recurrent)
         syn_data = x_next.astype(np.float32) * 2 + mean.to(device).detach().cpu().numpy()
 
     elif args.method == 'tabsyn':
@@ -63,10 +61,15 @@ def main(args):
         model.load_state_dict(torch.load(f'{ckpt_path}/model.pt'))
         model.eval()
         
-        x_next = sample(net=model.denoise_fn_D, 
-                        num_samples=num_samples, 
-                        dim=in_dim, 
-                        disc_model=disc_model)
+        # class_labels = torch.zeros((num_samples, 2)).to(args.device)
+        # class_labels[:, 1] = 1
+        x_next = guided_sample(net=model.denoise_fn_D, 
+                               num_samples=num_samples, 
+                               dim=in_dim, 
+                               disc_model=disc_model,
+                               device=args.device,
+                            #    class_labels=class_labels,
+                               add_factor=0)
         x_next = x_next * 2 + mean.to(device)
         syn_data = x_next.float().detach().cpu().numpy()
         

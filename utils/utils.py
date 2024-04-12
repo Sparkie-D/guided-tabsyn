@@ -119,6 +119,7 @@ def get_args():
     parser.add_argument('--ddpm_hidden_dim', type=int, default=1024)
     parser.add_argument('--ddpm_steps', type=int, default=1000)
     parser.add_argument('--ddpm_lr', type=float, default=1e-3)
+    parser.add_argument('--ddpm_epoch', type=int, default=10000)
 
     # Training
     parser.add_argument('--training_batch_size', type=int, default=4096, help='batch size')
@@ -173,7 +174,7 @@ def get_args():
     
     
     # configs for discriminator sampling
-    parser.add_argument('--forward_weight', '-f', type=float, default=1., help='Guidance weight in forward guidance steps')
+    parser.add_argument('--forward_weight', '-f', type=float, default=10., help='Guidance weight in forward guidance steps')
     parser.add_argument('--backward_steps', '-b', type=int, default=0, help='Num of gradient descent steps in backward guidance steps')
     parser.add_argument('--self_recurrent', '-r', type=int, default=1, help='Num of recurrent steps in self-recurrent steps')
     

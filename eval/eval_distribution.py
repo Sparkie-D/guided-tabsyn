@@ -71,16 +71,16 @@ def visual_distribution(data:dict, savefig=True, path='distributions', cat_cols=
         plt.savefig(f'{path}')
         plt.close()
     return fig, axes
-
-
-    
+ 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataname', type=str, default='pksim')
-    parser.add_argument('--method', type=str, default='tabsyn')
+    parser.add_argument('--method', type=str, default='ddpm')
+    parser.add_argument('--enable_guidance', action='store_true')
     
     args = parser.parse_args()
+    args.method = args.method if not args.enable_guidance else args.method+"_guided"
     args.save_dir = os.path.join('eval', 'distribution', args.dataname, args.method)
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)

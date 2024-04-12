@@ -32,7 +32,6 @@ def main(args):
     train_z = (train_z - mean) / 2
     train_data = train_z
 
-
     batch_size = 4096
     train_loader = DataLoader(
         train_data,

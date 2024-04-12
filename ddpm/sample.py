@@ -18,17 +18,15 @@ def main(args):
     steps = args.steps
     save_path = args.save_path
 
-    train_z, _, _, ckpt_path, disc_path, info, num_inverse, cat_inverse = get_input_generate(args)
+    train_z, _, ckpt_path, disc_path, info, num_inverse, cat_inverse = get_input_generate(args)
     in_dim = train_z.shape[1] 
 
     mean = train_z.mean(0)
 
     model = DDPM(
-        num_layers=args.ddpm_num_layers,
         input_dim=in_dim,
         hidden_dim=args.ddpm_hidden_dim,
         n_steps=args.ddpm_steps,
-        diff_lr=args.ddpm_lr,
         device=args.device
     )
 
@@ -43,8 +41,7 @@ def main(args):
     num_samples = train_z.shape[0]
 
     # x_next = model.universal_guided_sample()
-    x_next = model.sample_wo_guidance(batch_size=args.sample_batch_size,
-                                      n_samples=num_samples,)
+    x_next = model.sample_wo_guidance(batch_size=args.sample_batch_size, n_samples=num_samples)
 
     syn_data = x_next.astype(np.float32) * 2 + mean.to(device).detach().cpu().numpy()
     

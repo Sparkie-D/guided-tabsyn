@@ -13,9 +13,9 @@
             "python":"/home/ubuntu/.conda/envs/diffusion/bin/python",
             "args": [
                 "--dataname", "pksim",
-                "--method", "tabsyn",
-                "--mode", "train",
-                "--enable_guidance", "True",
+                "--method", "ddpm",
+                "--mode", "sample",
+                "--enable_guidance", 
             ]
         }
     ]

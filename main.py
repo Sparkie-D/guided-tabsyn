@@ -16,7 +16,7 @@ if __name__ == '__main__':
         else:
             args.save_path = f'synthetic/{args.dataname}/{args.method}_guided.csv'
         
-    args.logdir=os.path.join('logs', f'{args.dataname}', f'{args.method}')
+    args.logdir=os.path.join('logs', f'{args.dataname}', f'{args.method}' if not args.enable_guidance else f'{args.method}_discriminator')
     if not os.path.exists(args.logdir):
         os.makedirs(args.logdir)
     

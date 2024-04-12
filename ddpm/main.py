@@ -43,27 +43,19 @@ def main(args):
         num_workers = 4,
     )
 
-    num_epochs = 30000 + 1
+    num_epochs = args.ddpm_epoch
 
     # denoise_fn = MLPDiffusion(in_dim, 1024).to(device)
     # print(denoise_fn)
     
     model = DDPM(
-        num_layers=args.ddpm_num_layers,
         input_dim=in_dim,
         hidden_dim=args.ddpm_hidden_dim,
         n_steps=args.ddpm_steps,
-        diff_lr=args.ddpm_lr,
         device=args.device
     )
-
-    num_params = sum(p.numel() for p in model.diffuser.parameters())
-    print("the number of parameters", num_params)
-
-    # model = Model(denoise_fn = denoise_fn, hid_dim = train_z.shape[1]).to(device)
-
-    # optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=0)
-    # scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.9, patience=20, verbose=True)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=0)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.9, patience=20, verbose=True)
 
     model.train()
 
@@ -72,37 +64,44 @@ def main(args):
     start_time = time.time()
     with tqdm(total=num_epochs) as pbar:
         pbar.set_description(f"Training {args.method}")
+
         for epoch in range(num_epochs):
-        
+
             batch_loss = 0.0
             len_input = 0
             for batch in train_loader:
                 inputs = batch.float().to(device)
-                # loss = model(inputs)
-                loss = model.update(inputs)
-
-                batch_loss += loss * len(inputs)
-                len_input += len(inputs)
-                
-            curr_loss = batch_loss/len_input
-            # pbar.set_postfix({"Loss": curr_loss})
-            logger.add_scalar('train/loss', curr_loss, epoch)
+                loss = model(inputs)
             
+                loss = loss.mean()
+
+                batch_loss += loss.item() * len(inputs)
+                len_input += len(inputs)
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                pbar.set_postfix({"Loss": loss.item()})
+
+            curr_loss = batch_loss/len_input
+            scheduler.step(curr_loss)
+
             if curr_loss < best_loss:
-                best_loss = loss
+                best_loss = loss.item()
                 patience = 0
                 torch.save(model.state_dict(), f'{ckpt_path}/model.pt')
-            # else:
-            #     patience += 1
-            #     if patience == 500:
-            #         print('Early stopping')
-            #         break
+            else:
+                patience += 1
+                if patience == 2000:
+                    print('Early stopping')
+                    break
 
-            if epoch % 100 == 0:
+            if epoch % 1000 == 0:
                 torch.save(model.state_dict(), f'{ckpt_path}/model_{epoch}.pt')
-                
+
             pbar.update(1)
-            
+
     end_time = time.time()
     print('Time: ', end_time - start_time)
 
