@@ -8,7 +8,7 @@ import pandas as pd
 from copy import deepcopy
 
 import src
-from utils_train import make_dataset, update_ema
+from utils.utils_train import make_dataset, update_ema
 from baselines.tabddpm.models.modules import MLPDiffusion
 from baselines.tabddpm.models.gaussian_multinomial_distribution import GaussianMultinomialDiffusion
 

@@ -5,9 +5,11 @@ import os
 from tqdm import tqdm
 from torch.utils.data.sampler import WeightedRandomSampler
 from ddpm.ddpm import DDPM
+from tabsyn.model import MLPDiffusion, Model
 import argparse
-from ddpm.latent_utils import get_input_generate_disc as get_input_generate
-from ddpm.discriminator.model import discriminator
+from utils.latent_utils import get_input_generate_disc as get_input_generate
+from utils.diffusion_utils import sample
+from discriminator.model import discriminator
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 
@@ -67,9 +69,12 @@ class Trainer(object):
         
 
     def train(self, batch_size=32, num_epoch=1000):  
+        save_path = os.path.join(self.model_path, f'discriminator.pickle')
+        
         sampler = WeightedRandomSampler(weights=torch.ones(len(self.pos_data)), num_samples=batch_size, replacement=True)
         pos_loader = torch.utils.data.DataLoader(self.pos_data, batch_size=batch_size, sampler=sampler)
         neg_loader = torch.utils.data.DataLoader(self.neg_data, batch_size=batch_size, shuffle=True)             
+                
         for epoch in tqdm(range(num_epoch), desc='Training'):
             loss = self.train_epoch(neg_loader, pos_loader)
             
@@ -78,8 +83,13 @@ class Trainer(object):
             self.eval_epoch(batch_size, epoch)
             
             if self.save_model_epoch > 0 and (epoch + 1) % self.save_model_epoch == 0:
-                with open(os.path.join(self.model_path, f'discriminator.pickle'), 'wb') as f:
+                with open(save_path, 'wb') as f:
                     pickle.dump(self.model.state_dict(), f)
+                    # print(f'model saved at {save_path}')
+        else:
+            with open(save_path, 'wb') as f:
+                pickle.dump(self.model.state_dict(), f)
+                # print(f'model saved at {save_path}')
 
     def eval_epoch(self, batch_size, epoch):
         sampler = WeightedRandomSampler(weights=torch.ones(len(self.valid_pos)), num_samples=batch_size, replacement=True)
@@ -130,22 +140,37 @@ def main(args):
     mean = train_pos.mean(0)
     in_dim = train_pos.shape[1]
     
-    model = DDPM(
-        num_layers=args.ddpm_num_layers,
-        input_dim=in_dim,
-        hidden_dim=args.ddpm_hidden_dim,
-        n_steps=args.ddpm_steps,
-        diff_lr=args.ddpm_lr,
-        device=args.device
-    )
-    model.load_state_dict(torch.load(f'tabsyn/ckpt/{args.dataname}/model.pt'))
     
     print('Pre-sampling for discriminator training')
-    x_train = model.sample_wo_guidance(batch_size=args.sample_batch_size,
-                                       n_samples=train_pos.shape[0],)
+    if args.method == 'ddpm':
+        model = DDPM(
+            num_layers=args.ddpm_num_layers,
+            input_dim=in_dim,
+            hidden_dim=args.ddpm_hidden_dim,
+            n_steps=args.ddpm_steps,
+            diff_lr=args.ddpm_lr,
+            device=args.device
+        )
+        model.load_state_dict(torch.load(f'ddpm/ckpt/{args.dataname}/model.pt'))
+        
+        x_train = model.sample_wo_guidance(batch_size=args.sample_batch_size,
+                                        n_samples=train_pos.shape[0],)
+        
+        x_test = model.sample_wo_guidance(batch_size=args.sample_batch_size,
+                                        n_samples=valid_pos.shape[0],)
+    elif args.method == 'tabsyn':
+        denoise_fn = MLPDiffusion(in_dim, 1024).to(args.device)
+        model = Model(denoise_fn = denoise_fn, hid_dim = train_pos.shape[1]).to(args.device)
+        model.load_state_dict(torch.load(f'tabsyn/ckpt/{args.dataname}/model.pt'))
+
+        x_train = sample(model.denoise_fn_D, train_pos.shape[0], in_dim)
+        x_train = x_train * 2 + mean.to(args.device)
+        x_train = x_train.float().detach().cpu().numpy()
+        
+        x_test = sample(model.denoise_fn_D, valid_pos.shape[0], in_dim)
+        x_test = x_test * 2 + mean.to(args.device)
+        x_test = x_test.float().detach().cpu().numpy()
     
-    x_test = model.sample_wo_guidance(batch_size=args.sample_batch_size,
-                                      n_samples=valid_pos.shape[0],)
     print('Samping finished.')
     train_neg = x_train.astype(np.float32) * 2 + mean.to(args.device).detach().cpu().numpy()
     valid_neg = x_test.astype(np.float32) * 2 + mean.to(args.device).detach().cpu().numpy()
@@ -161,9 +186,9 @@ def main(args):
         valid_neg=valid_neg,
         device=args.device,
         logger=SummaryWriter(args.logdir),
-        model_path=f'tabsyn/discriminator/ckpt/{args.dataname}'
+        model_path=f'discriminator/ckpt/{args.method}/{args.dataname}'
     )
     trainer.train(batch_size=32,
-                  num_epoch=100)
+                  num_epoch=args.disc_epoch)
 
    

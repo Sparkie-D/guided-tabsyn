@@ -5,8 +5,8 @@ import warnings
 import time
 
 from tabsyn.model import MLPDiffusion, Model
-from tabsyn.latent_utils import get_input_generate, recover_data, split_num_cat_target
-from tabsyn.diffusion_utils import sample
+from utils.latent_utils import get_input_generate, recover_data, split_num_cat_target
+from utils.diffusion_utils import sample
 
 warnings.filterwarnings('ignore')
 
@@ -16,9 +16,8 @@ def main(args):
     device = args.device
     steps = args.steps
     save_path = args.save_path
-    # save_path.replace('synthetic', '../guided_tabsyn/synthetic')
 
-    train_z, _, _, ckpt_path, info, num_inverse, cat_inverse = get_input_generate(args)
+    train_z, _, ckpt_path, _, info, num_inverse, cat_inverse = get_input_generate(args)
     in_dim = train_z.shape[1] 
 
     mean = train_z.mean(0)
@@ -28,6 +27,7 @@ def main(args):
     model = Model(denoise_fn = denoise_fn, hid_dim = train_z.shape[1]).to(device)
 
     model.load_state_dict(torch.load(f'{ckpt_path}/model.pt'))
+    model.eval()
 
     '''
         Generating samples    
@@ -40,7 +40,7 @@ def main(args):
     x_next = sample(model.denoise_fn_D, num_samples, sample_dim)
     x_next = x_next * 2 + mean.to(device)
 
-    syn_data = x_next.float().cpu().numpy()
+    syn_data = x_next.float().detach().cpu().numpy()
     syn_num, syn_cat, syn_target = split_num_cat_target(syn_data, info, num_inverse, cat_inverse, args.device) 
 
     syn_df = recover_data(syn_num, syn_cat, syn_target, info)

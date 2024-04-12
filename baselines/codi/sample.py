@@ -17,7 +17,7 @@ from baselines.codi.models.tabular_unet import tabularUnet
 from baselines.codi.diffusion_discrete import MultinomialDiffusion
 from baselines.codi.utils import *
 
-from utils_train import preprocess
+from utils.utils_train import preprocess
 warnings.filterwarnings("ignore")
 
 def recover_data(syn_num, syn_cat, info):

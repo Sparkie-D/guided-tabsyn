@@ -7,7 +7,7 @@ import argparse
 import warnings
 import json
 
-from utils_train import preprocess
+from utils.utils_train import preprocess
 
 from baselines.goggle.GoggleModel import GoggleModel
 

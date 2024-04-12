@@ -17,7 +17,7 @@ from baselines.codi.diffusion_discrete import MultinomialDiffusion
 from baselines.codi.utils import *
 
 warnings.filterwarnings("ignore")
-from utils_train import preprocess
+from utils.utils_train import preprocess
 
 
 def main(args):

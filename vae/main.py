@@ -14,7 +14,7 @@ import json
 import time
 
 from vae.model import Model_VAE, Encoder_model, Decoder_model
-from utils_train import preprocess, TabularDataset
+from utils.utils_train import preprocess, TabularDataset
 
 warnings.filterwarnings('ignore')
 
@@ -122,7 +122,7 @@ def main(args):
     optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=WD)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.95, patience=10, verbose=True)
 
-    num_epochs = 10000
+    num_epochs = args.vae_epoch
     best_train_loss = float('inf')
 
     current_lr = optimizer.param_groups[0]['lr']
@@ -212,6 +212,7 @@ def main(args):
     
     # Saving latent embeddings
     with torch.no_grad():
+        model.load_state_dict(torch.load(model_save_path))
         pre_encoder.load_weights(model)
         pre_decoder.load_weights(model)
 

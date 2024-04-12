@@ -88,9 +88,19 @@ if __name__ == '__main__':
     raw = pd.read_csv(os.path.join('synthetic', args.dataname, f'real.csv'))
     syn = pd.read_csv(os.path.join('synthetic', args.dataname, f'{args.method}.csv'))
     
+    visual_dict = {
+        'Original':raw[raw.columns],
+        'synthetic':syn[raw.columns],
+    }
+    if 'guided' in args.method:
+        fewshot = pd.read_csv(os.path.join('data', f'{args.dataname}_fewshot', f'{args.dataname}_fewshot.csv'))
+        fewshot_all = pd.read_csv(os.path.join('data', f'{args.dataname}_fewshot', f'{args.dataname}_fewshot_all.csv'))
+        visual_dict['Fewshot'] = fewshot[raw.columns]
+        visual_dict['Fewshot All'] = fewshot_all[raw.columns]
+    
     cat_cols = [col for col in raw.columns if raw[col].dtype == 'object']
 
-    visual_distribution({
-        'Raw':raw[raw.columns],
-        'synthetic':syn[raw.columns],
-    }, path=os.path.join(args.save_dir, 'distributions.png'), cat_cols=cat_cols, enable_labels=True)
+    visual_distribution(visual_dict, 
+                        path=os.path.join(args.save_dir, 'distributions.png'), 
+                        cat_cols=cat_cols, 
+                        enable_labels=True)

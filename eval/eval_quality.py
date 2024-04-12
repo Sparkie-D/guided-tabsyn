@@ -5,7 +5,7 @@ import sys
 import json
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils_train import preprocess, TabularDataset
+from utils.utils_train import preprocess, TabularDataset
 from sklearn.preprocessing import OneHotEncoder
 from synthcity.metrics import eval_detection, eval_performance, eval_statistical
 from synthcity.plugins.core.dataloader import GenericDataLoader

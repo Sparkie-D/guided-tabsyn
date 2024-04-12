@@ -5,9 +5,9 @@ import warnings
 import time
 import numpy as np
 
-from tabsyn.ddpm import DDPM
-from tabsyn.latent_utils import get_input_generate, recover_data, split_num_cat_target
-from tabsyn.discriminator.model import discriminator
+from ddpm.ddpm import DDPM
+from utils.latent_utils import get_input_generate, recover_data, split_num_cat_target
+from discriminator.model import discriminator
 
 warnings.filterwarnings('ignore')
 

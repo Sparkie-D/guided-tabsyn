@@ -9,7 +9,7 @@ from baselines.tabddpm.models.gaussian_multinomial_distribution import GaussianM
 from baselines.tabddpm.models.modules import MLPDiffusion
 
 import src
-from utils_train import make_dataset
+from utils.utils_train import make_dataset
 
 @torch.no_grad()
 def split_num_cat_target(syn_data, info, num_inverse, cat_inverse):

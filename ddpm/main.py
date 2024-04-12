@@ -9,8 +9,8 @@ import time
 
 from tqdm import tqdm
 # from tabsyn.model import MLPDiffusion, Model
-from tabsyn.ddpm import DDPM
-from tabsyn.latent_utils import get_input_train
+from ddpm.ddpm import DDPM
+from utils.latent_utils import get_input_train
 from torch.utils.tensorboard import SummaryWriter
 
 warnings.filterwarnings('ignore')

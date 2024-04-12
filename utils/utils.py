@@ -16,21 +16,25 @@ from vae.main import main as train_vae
 from tabsyn.main import main as train_tabsyn
 from tabsyn.sample import main as sample_tabsyn
 
-from tabsyn.main import main as train_ddpm
-from tabsyn.sample import main as sample_ddpm
+from ddpm.main import main as train_ddpm
+from ddpm.sample import main as sample_ddpm
 
-from ddpm.discriminator.main import main as train_discriminator
-from ddpm.discriminator.sample import main as sample_discriminator
+from discriminator.main import main as train_discriminator
+from discriminator.sample import main as sample_discriminator
 
 import argparse
 import importlib
 
-def execute_function(method, mode):
+def execute_function(method, mode, enable_guidance):
+    # assert not enable_guidance or mode !='train'
+     
     if method == 'vae':
         mode = 'train'
-
-    main_fn = eval(f'{mode}_{method}')
-
+    if not enable_guidance:
+        main_fn = eval(f'{mode}_{method}')
+    else:
+        main_fn = eval(f'{mode}_discriminator')
+        
     return main_fn
 
 def get_args():
@@ -149,19 +153,24 @@ def get_args():
     parser.add_argument('--cat_encoding', type=str, default='one-hot', help='Encoding method for categorical features')
 
 
-    # configs for traing TabSyn's VAE
+    # configs for traing VAE
     parser.add_argument('--max_beta', type=float, default=1e-2, help='Maximum beta')
     parser.add_argument('--min_beta', type=float, default=1e-5, help='Minimum beta.')
     parser.add_argument('--lambd', type=float, default=0.7, help='Batch size.')
+    parser.add_argument('--vae_epoch', type=int, default=10000)
 
 
     # configs for sampling
     parser.add_argument('--save_path', type=str, default=None, help='Path to save synthetic data.')
     parser.add_argument('--steps', type=int, default=50, help='NFEs.')
     parser.add_argument('--sample_batch_size', type=int, default=256)
-    
+    parser.add_argument('--enable_guidance', action='store_true')
+        
+        
     # configs for discriminator
     parser.add_argument('--disc_hidden_dim', type=int, default=4)
+    parser.add_argument('--disc_epoch', type=int, default=100)
+    
     
     # configs for discriminator sampling
     parser.add_argument('--forward_weight', '-f', type=float, default=1., help='Guidance weight in forward guidance steps')

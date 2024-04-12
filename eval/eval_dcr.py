@@ -6,7 +6,7 @@ import json
 import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils_train import preprocess, TabularDataset
+from utils.utils_train import preprocess, TabularDataset
 from sklearn.preprocessing import OneHotEncoder
 
 pd.options.mode.chained_assignment = None
