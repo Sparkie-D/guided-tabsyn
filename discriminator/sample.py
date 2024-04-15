@@ -26,7 +26,7 @@ def main(args):
 
     mean = train_z.mean(0)
     start_time = time.time()
-    num_samples = train_z.shape[0]    
+    num_samples = train_z.shape[0]  if args.num_samples == 0 else args.num_samples 
     
     print(f"loading discriminator at {disc_path}")
     disc_model = discriminator(input_dim=in_dim, 

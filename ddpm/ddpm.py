@@ -202,14 +202,42 @@ class DDPM(nn.Module):
         guidance = torch.autograd.grad(loss, zt)
         return guidance[0]
     
+    def backward_guidance(self, disc_model, z0, m):
+        delta = torch.zeros_like(z0, requires_grad=True)
+        lr=1e-3
+        for _ in range(m):
+            output = disc_model(z0 + delta)
+            loss = -torch.sum(torch.log(torch.sigmoid(output)))
+            with torch.no_grad():
+                delta -= lr * torch.autograd.grad(loss, delta)[0]
+        
+        return delta
     def universal_guided_sample_batch(self, batch_size=400, disc_model=None, forward_weight=1, backward_step=10, self_recurrent_step=10):
         x = torch.randn((batch_size, self.input_dim), dtype=torch.float32).to(self.device).requires_grad_(True)
+        
         for i in reversed(range(0, self.n_steps)):
             t = torch.full((batch_size,), i, device=self.device, dtype=torch.long)
-            eps_theta = self.diffuser(x, t)
-            z0_hat = (x - extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * eps_theta) / extract(self.sqrt_alphas_cumprod, t, x.shape)
-            eps_theta_hat = eps_theta + forward_weight * extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * self.forward_guidance(disc_model, z0_hat, x) # forward universal guidance
-            x = self.p_sample(x, t, eps_theta_hat).requires_grad_(True)
+            for _ in range(self_recurrent_step):
+                # forward guidance
+                eps_theta = self.diffuser(x, t)
+                z0_hat = (x - extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * eps_theta) / extract(self.sqrt_alphas_cumprod, t, x.shape)
+                eps_theta_hat = eps_theta + forward_weight * extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * self.forward_guidance(disc_model, z0_hat, x) # forward universal guidance
+                
+                # bacward guidance
+                if backward_step > 0:
+                    eps_theta_hat = eps_theta_hat - extract(self.sqrt_alphas_cumprod, t, x.shape) / extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * self.backward_guidance(disc_model, z0_hat, backward_step)
+                
+                x_hat = self.p_sample(x, t, eps_theta_hat).requires_grad_(True)
+                
+                # self recurrent steps
+                if i > 0:
+                    eps_hat = torch.randn_like(x_hat)
+                    w =  extract(self.sqrt_alphas_cumprod, t, x.shape) /  extract(self.sqrt_alphas_cumprod, t-1, x.shape)
+                    x = w * x_hat + torch.sqrt(1-torch.square(w)) * eps_hat
+                else:
+                    break
+            
+            x = x_hat if self_recurrent_step > 0 else self.p_sample(x, t, eps_theta_hat).requires_grad_(True)
         return x.detach().cpu().numpy()
     
     

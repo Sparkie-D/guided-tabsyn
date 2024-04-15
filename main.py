@@ -4,7 +4,7 @@ from utils.utils import execute_function, get_args
 
 if __name__ == '__main__':
     args = get_args()
-    if torch.cuda.is_available():
+    if torch.cuda.is_available() and args.gpu >= 0:
         args.device = f'cuda:{args.gpu}'
     else:
         args.device = 'cpu'

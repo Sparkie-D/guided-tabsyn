@@ -166,6 +166,7 @@ def get_args():
     parser.add_argument('--steps', type=int, default=50, help='NFEs.')
     parser.add_argument('--sample_batch_size', type=int, default=256)
     parser.add_argument('--enable_guidance', action='store_true')
+    parser.add_argument('--num_samples', type=int, default=0)
         
         
     # configs for discriminator
